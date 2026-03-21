@@ -19,23 +19,31 @@ int main(){
   // setCursorAtEndOfScreen(board);
   enableKeyPull();
   while (1){
-    uint8_t keys[10];
-    int size = getNextKeys(keys, sizeof(keys));
-    for (int i = 0; i < size; i++){
-      printf("%c", keys[i]);
+    uint8_t keys[10] = {0};
+    int size = getNextKeys(keys, sizeof(keys) - 1);
+    if(size > 0){
+      for (int i = 0; i < size; i++){
+        printf("%4d %c\n", keys[i],keys[i]);
+      }
+      printf("----");
+      for (int i = 0; i < size; i++){
+        switch(keys[i]){
+          case 27: //ESC
+            printf("esc");
+            while((keys[i] <= '0' || keys[i] > '9') && i >= size - 1){
+              printf("%c", keys[i]);
+              i++;
+            }
+            printf("%c", keys[i]);
+          break;
+          default:
+            printf("%c", keys[i]);
+          break;
+        }
+      }
+      printf("\n");
     }
     usleep(10000); // Sleep for 10 milliseconds to prevent busy waiting
   }
   return 0;
 }
-/**
- * left: 91,27,68
- * right: 91,27,67
- * down: 91,27,66
- * up: 91,27,65
- * 
- * a: 97
- * d: 100
- * w: 119
- * s: 115
- */

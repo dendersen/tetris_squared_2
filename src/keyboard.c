@@ -8,6 +8,7 @@
 #include <fcntl.h>
 #include <pthread.h>
 #include <string.h>
+#include "keyboard.h"
 
 struct termios orig_termios;
 
@@ -25,6 +26,32 @@ typedef struct keyData{
 pthread_mutex_t* keyMutex = NULL;
 bool pullBuffer = false;//false to disable pulling, true to enable pulling
 keyBuffer_t* keyBuffer = NULL;
+
+int** tetrisEncoding[NONE_operation][keysPerOperation] = {0};
+
+void setKeyMapping(int operation, int keyIndex, int key){
+  if (operation < 0 || operation >= NONE_operation || keyIndex < 0 || keyIndex >= keysPerOperation || key < 0 || key > NONE_key){
+    return;
+  }
+  tetrisEncoding[operation][keyIndex] = key;
+};
+
+void setDefaultKeyMapping(int** tetrisEncoding) {
+  setKeyMapping(moveLeft, 0, left);
+  setKeyMapping(moveLeft, 1, a);
+  setKeyMapping(moveRight, 0, right);
+  setKeyMapping(moveRight, 1, d);
+  setKeyMapping(moveDown, 0, down);
+  setKeyMapping(moveDown, 1, s);
+  setKeyMapping(dropPiece, 0, up);
+  setKeyMapping(dropPiece, 1, w);
+  setKeyMapping(rotateClockwise, 0, squareBracketOpen);
+  setKeyMapping(rotateClockwise, 1, comma);
+  setKeyMapping(rotateCounterClockwise, 0, squareBracketClose);
+  setKeyMapping(rotateCounterClockwise, 1, period);
+  setKeyMapping(holdPiece, 0, tab);
+  setKeyMapping(holdPiece, 1, d);
+};
 
 #if KEY_BUFFER_SIZE <= 0
 #error "KEY_BUFFER_SIZE must be greater than 0"
@@ -122,3 +149,4 @@ int getNextKeys(uint8_t* buffer, int size){
   pthread_mutex_unlock(keyMutex);
   return keysToRead;
 }
+
