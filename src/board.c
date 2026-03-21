@@ -9,8 +9,8 @@
 #define T_COLOR 0xFF00FFFF //purple
 #define S_COLOR 0xFF0000FF //red
 #define Z_COLOR 0x00FF00FF //green
-#define J_COLOR 0xFF7F7FFF //pink
-#define L_COLOR 0xFFFF00FF //orange
+#define J_COLOR 0xFF69B4FF //pink
+#define L_COLOR 0xFF5F1FFF //orange
 
 /**
  * generate a board with the given dimensions, with all blocks empty
@@ -56,9 +56,9 @@ Piece_t* generatePieceFromType(PieceEnum_t pieceType){
   switch (pieceType)
   {
   case I:
-    out = createPiece(4, 4);
+    out = createPiece(4, 1);
     for (int i = 0; i < 4; i++){
-      getBlock(out,i,1).color = I_COLOR;
+      getBlock(out,i,0).color = I_COLOR;
     }
     break;
   case O:
@@ -201,10 +201,10 @@ bool placePieceOnBoard(board_t* board, Piece_t* piece){
   for (int x = 0; x < piece->width; x++){
     for (int y = 0; y < piece->height; y++){
       if (getBlock(piece,x,y).A != 0){
-        getBlock_p(board, piece, x, y).color = getBlock(piece, x, y).color;
         if (getBlock_p(board, piece, x, y).A != 0){
           overlap = true;
         }
+        getBlock_p(board, piece, x, y).color = getBlock(piece, x, y).color;
       }
     }
   }

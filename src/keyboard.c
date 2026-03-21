@@ -10,7 +10,7 @@
 struct termios orig_termios;
 
 #define MAX_WAIT 10
-#define KEY_BUFFER_SIZE 2
+#define KEY_BUFFER_SIZE 2 //todo implement as variable
 pthread_t* managingThread = NULL;
 pthread_mutex_t* keyMutex = NULL;
 char* keyBuffer = NULL;
@@ -47,19 +47,26 @@ int keyPullingThread(){
     pthread_mutex_unlock(keyMutex);
     char key = getKey();
     if (key != -1){
+      pthread_mutex_lock(keyMutex);
       waitTime = 0;
       keyBuffer[0] = keyBuffer[1];
       keyBuffer[1] = key;
+      pthread_mutex_unlock(keyMutex);
     }else if (waitTime < MAX_WAIT){
+      pthread_mutex_lock(keyMutex);
       waitTime += 1;
+      pthread_mutex_unlock(keyMutex);
     } else if (waitTime >= MAX_WAIT){
+      pthread_mutex_lock(keyMutex);
       waitTime = 0;
       keyBuffer[0] = keyBuffer[1];
       keyBuffer[1] = '\0';
+      pthread_mutex_unlock(keyMutex);
     }
     usleep(20000);
     pthread_mutex_lock(keyMutex);
   }
+  disableRawMode();
   return 0;
 }
 
@@ -71,4 +78,13 @@ void enableKeyPull(){
   managingThread = malloc(sizeof(pthread_t));
   pullBuffer = true;
   pthread_create(managingThread, NULL, (void* (*)(void*))keyPullingThread, NULL);
+}
+
+char getNextKey(){
+  pthread_mutex_lock(keyMutex);
+  char key = keyBuffer[0];
+  keyBuffer[0] = keyBuffer[1];
+  keyBuffer[1] = '\0';
+  pthread_mutex_unlock(keyMutex);
+  return key;
 }
