@@ -3,18 +3,38 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <termios.h>
 #include <fcntl.h>
 #include <pthread.h>
+#include <string.h>
 
 struct termios orig_termios;
 
-#define MAX_WAIT 10
-#define KEY_BUFFER_SIZE 2
+#define MAX_WAIT 30
+#define KEY_BUFFER_SIZE 4
+#define KEY_READ_SIZE 2
+#define KEY_READ_INTERVAL 100
 pthread_t* managingThread = NULL;
+typedef struct keyData{
+  char keys[KEY_BUFFER_SIZE];
+  int nextIndex;
+} keyBuffer_t;
+
+//controlls pullBuffer and keyBuffer
 pthread_mutex_t* keyMutex = NULL;
-char* keyBuffer = NULL;
-bool pullBuffer = false;
+bool pullBuffer = false;//false to disable pulling, true to enable pulling
+keyBuffer_t* keyBuffer = NULL;
+
+#if KEY_BUFFER_SIZE <= 0
+#error "KEY_BUFFER_SIZE must be greater than 0"
+#elif KEY_READ_SIZE <= 0
+#error "KEY_READ_SIZE must be greater than 0"
+#elif KEY_READ_INTERVAL <= 0
+#error "KEY_READ_INTERVAL must be greater than 0"
+#elif KEY_BUFFER_SIZE < KEY_READ_SIZE
+#error "KEY_BUFFER_SIZE must be greater than or equal to KEY_READ_SIZE"
+#endif
 
 void disableRawMode() {
   tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios);
@@ -32,43 +52,73 @@ void enableRawMode() {
   tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
 }
 
-char getKey() {
-  unsigned char c = 0;
-  if (read(STDIN_FILENO, &c, 1) == 1) {
-    return c;
+void makeSpaceInKeyBuffer(int size){
+  int missingSpace = size - (KEY_BUFFER_SIZE - keyBuffer->nextIndex);
+  if (missingSpace <= 0){
+    return;
   }
-  return -1;
+  for (int i = 0; i < KEY_BUFFER_SIZE - missingSpace; i++){
+    keyBuffer->keys[i] = keyBuffer->keys[i + missingSpace];
+  }
+  for (int i = KEY_BUFFER_SIZE - missingSpace; i < KEY_BUFFER_SIZE; i++){
+    keyBuffer->keys[i] = '\0';
+  }
 }
 
-int keyPullingThread(){
+void* keyPullingThread(){
   pthread_mutex_lock(keyMutex);
-  int waitTime = 0;
   while (pullBuffer){
     pthread_mutex_unlock(keyMutex);
-    char key = getKey();
-    if (key != -1){
-      waitTime = 0;
-      keyBuffer[0] = keyBuffer[1];
-      keyBuffer[1] = key;
-    }else if (waitTime < MAX_WAIT){
-      waitTime += 1;
-    } else if (waitTime >= MAX_WAIT){
-      waitTime = 0;
-      keyBuffer[0] = keyBuffer[1];
-      keyBuffer[1] = '\0';
+
+    usleep(KEY_READ_INTERVAL);
+    uint8_t keys[KEY_BUFFER_SIZE];
+    int ret = read(STDIN_FILENO, &keys, sizeof(keys));
+    if (ret <= 0){
+      continue;
     }
-    usleep(20000);
     pthread_mutex_lock(keyMutex);
+    if (keyBuffer->nextIndex + ret > KEY_BUFFER_SIZE){
+      int missingSpace = ret - (KEY_BUFFER_SIZE - keyBuffer->nextIndex);
+      for (int i = 0; i < KEY_BUFFER_SIZE - missingSpace; i++){
+        keyBuffer->keys[i] = keyBuffer->keys[i + missingSpace];
+      }
+      for (int i = KEY_BUFFER_SIZE - missingSpace; i < KEY_BUFFER_SIZE; i++){
+        keyBuffer->keys[i] = '\0';
+      }
+      keyBuffer->nextIndex -= missingSpace;
+    }
+    for (int k = 0; k < ret && keyBuffer->nextIndex < KEY_BUFFER_SIZE; k++, keyBuffer->nextIndex++){
+      keyBuffer->keys[keyBuffer->nextIndex] = keys[k];
+    }
   }
-  return 0;
+  pthread_mutex_unlock(keyMutex);
+  disableRawMode();
+  free(keyBuffer);
+  keyBuffer = NULL;
+  return NULL;
 }
 
 void enableKeyPull(){
   enableRawMode();
-  keyMutex = malloc(sizeof(pthread_mutex_t));
+  keyMutex = malloc(sizeof(*keyMutex));
   pthread_mutex_init(keyMutex, NULL);
-  keyBuffer = malloc(sizeof(char) * KEY_BUFFER_SIZE);
-  managingThread = malloc(sizeof(pthread_t));
+  keyBuffer = malloc(sizeof(*keyBuffer));
+  managingThread = malloc(sizeof(*managingThread));
   pullBuffer = true;
   pthread_create(managingThread, NULL, (void* (*)(void*))keyPullingThread, NULL);
+}
+
+int getNextKeys(uint8_t* buffer, int size){
+  pthread_mutex_lock(keyMutex);
+  int keysToRead = size < keyBuffer->nextIndex ? size : keyBuffer->nextIndex;
+  memcpy(buffer, keyBuffer->keys, keysToRead);
+  keyBuffer->nextIndex -= keysToRead;
+  for (int i = 0; i < keyBuffer->nextIndex; i++){
+    keyBuffer->keys[i] = keyBuffer->keys[i + keysToRead];
+  }
+  for (int i = keyBuffer->nextIndex; i < KEY_BUFFER_SIZE; i++){
+    keyBuffer->keys[i] = '\0';
+  }
+  pthread_mutex_unlock(keyMutex);
+  return keysToRead;
 }
