@@ -22,7 +22,7 @@ void displayBoardAndPiece(board_t* board, Piece_t* piece, char* title){
   clearScreen();
   moveCursor(0, 0);
   printf("%s", title);
-  for(int x = 0; x < board->width + xOffset * 2 + 1; x++){
+  for(int x = 0; x < board->width + xOffset * 2; x++){
     moveCursor(x, yOffset - 1);
     printf("-");
     moveCursor(x, board->height + yOffset);
@@ -31,21 +31,20 @@ void displayBoardAndPiece(board_t* board, Piece_t* piece, char* title){
   for(int y = 0; y < board->height; y++){
     moveCursor(0, y + yOffset);
     printf("|");
-    moveCursor(board->width + xOffset * 2, y + yOffset);
+    moveCursor(board->width + xOffset * 2 - 1, y + yOffset);
     printf("|");
   }
   
   for (int i = 0; i < board->width * board->height; i++){
-    int x = i % board->width;
-    int y = i / board->width;
+    int x = boardIToX(i, board);
+    int y = boardIToY(i, board);
     moveCursor(x + xOffset, y + yOffset);
     if (board->blocks[i].A != 0){
       if (board->blocks[i].A < 255){
-        setColorA(board->blocks[i].R, board->blocks[i].G, board->blocks[i].B, board->blocks[i].A);
+        printColorA(blockChar, board->blocks[i].R, board->blocks[i].G, board->blocks[i].B, board->blocks[i].A);
       } else {
-        setColor(board->blocks[i].R, board->blocks[i].G, board->blocks[i].B);
+        printColor(blockChar, board->blocks[i].R, board->blocks[i].G, board->blocks[i].B);
       }
-      printf(blockChar);
     }else{
       printf(emptyChar);
     }
@@ -55,13 +54,12 @@ void displayBoardAndPiece(board_t* board, Piece_t* piece, char* title){
     for (int y = 0; y < piece->height; y++){
       block_t block = getBlock(piece,x,y);
       if (block.A != 0){
-        if (block.A < 255){
-          setColorA(block.R, block.G, block.B, block.A);
-        } else {
-          setColor(block.R, block.G, block.B);
-        }
         moveCursor(x + xOffset + piece->x, y + yOffset + piece->y);
-        printf(shadeChar);
+        if (block.A < 255){
+          printColorA(shadeChar, block.R, block.G, block.B, block.A);
+        } else {
+          printColor(shadeChar, block.R, block.G, block.B);
+        }
       }
     }
   }
