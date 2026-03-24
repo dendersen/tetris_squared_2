@@ -13,7 +13,7 @@
 struct termios orig_termios;
 
 #define MAX_WAIT 30
-#define KEY_BUFFER_SIZE 4
+#define KEY_BUFFER_SIZE 10
 #define KEY_READ_SIZE 2
 #define KEY_READ_INTERVAL 100
 pthread_t* managingThread = NULL;
@@ -27,16 +27,21 @@ pthread_mutex_t* keyMutex = NULL;
 bool pullBuffer = false;//false to disable pulling, true to enable pulling
 keyBuffer_t* keyBuffer = NULL;
 
-int** tetrisEncoding[NONE_operation][keysPerOperation] = {0};
+int tetrisEncoding[NONE_operation][keysPerOperation] = {0};
 
 void setKeyMapping(int operation, int keyIndex, int key){
   if (operation < 0 || operation >= NONE_operation || keyIndex < 0 || keyIndex >= keysPerOperation || key < 0 || key > NONE_key){
     return;
   }
   tetrisEncoding[operation][keyIndex] = key;
-};
+}
 
-void setDefaultKeyMapping(int** tetrisEncoding) {
+void setDefaultKeyMapping() {
+  for(int i = 0; i < NONE_operation; i++){
+    for(int j = 0; j < keysPerOperation; j++){
+      tetrisEncoding[i][j] = NONE_key;
+    }
+  }
   setKeyMapping(moveLeft, 0, left);
   setKeyMapping(moveLeft, 1, a);
   setKeyMapping(moveRight, 0, right);
@@ -51,7 +56,7 @@ void setDefaultKeyMapping(int** tetrisEncoding) {
   setKeyMapping(rotateCounterClockwise, 1, period);
   setKeyMapping(holdPiece, 0, tab);
   setKeyMapping(holdPiece, 1, d);
-};
+}
 
 #if KEY_BUFFER_SIZE <= 0
 #error "KEY_BUFFER_SIZE must be greater than 0"
@@ -150,3 +155,115 @@ int getNextKeys(uint8_t* buffer, int size){
   return keysToRead;
 }
 
+/**
+ * Returns the number of bytes used in the rawKeyDataBuff for the ESC sequence. 
+ * If the first byte is not an ESC sequence, returns 0 and does not modify customKeyBuff.
+ * otherwise does not count the ESC byte in the used bytes and sets customKeyBuff to the corresponding customKey value for the ESC sequence.
+ */
+uint8_t processESC(uint8_t* customKeyBuff, uint8_t* rawKeyDataBuff, int size){
+  if(customKeyBuff == NULL || rawKeyDataBuff == NULL || size <= 0){
+    return 0;
+  }
+  uint8_t used = 0;
+  if(rawKeyDataBuff[0] == 0x1B){
+    if (size > 1 && rawKeyDataBuff[1] == '['){
+      used++;
+      if (size > 2){
+        switch (rawKeyDataBuff[2]) {
+        case 'A':
+          *customKeyBuff = up;
+          break;
+        case 'B':
+          *customKeyBuff = down;
+          break;
+        case 'C':
+          *customKeyBuff = right;
+          break;
+        case 'D':
+          *customKeyBuff = left;
+          break;
+        default:
+          return 1;
+          break;
+        }
+        used++;
+      }
+    }
+  }
+  return used;
+}
+
+int rawKeyToCustomKey(uint8_t* rawKeyDataBuff, uint8_t* customKeyBuff, int size){
+  if (size <= 0){
+    return 0;
+  }
+  int written = 0;
+  for (int i = 0; i < size; i++){
+    if (rawKeyDataBuff[i] >= 'a' && rawKeyDataBuff[i] <= 'z'){
+      customKeyBuff[i] = rawKeyDataBuff[i] - 'a' + a;
+      written++;
+      continue;
+    }
+    if (rawKeyDataBuff[i] >= 'A' && rawKeyDataBuff[i] <= 'Z'){
+      customKeyBuff[i] = rawKeyDataBuff[i] - 'A' + a;
+      written++; 
+      continue;
+    }
+    switch (rawKeyDataBuff[i]) {
+    case ' ':
+      customKeyBuff[i] = space;
+      written++;
+      break;
+    case '-':
+      customKeyBuff[i] = dash;
+      written++;
+      break;
+    case ',':
+      customKeyBuff[i] = comma;
+      written++;
+      break;
+    case '.':
+      customKeyBuff[i] = period;
+      written++;
+      break;
+    case '/':
+      customKeyBuff[i] = slash;
+      written++;
+      break;
+    case ';':
+      customKeyBuff[i] = semicolon;
+      written++;
+      break;
+    case '"':
+      customKeyBuff[i] = quote;
+      written++;
+      break;
+    case '|':
+      customKeyBuff[i] = vert;
+      written++;
+      break;
+    case '\\':
+      customKeyBuff[i] = backslash;
+      written++;
+      break;
+    case 0x1B:
+      int temp = processESC(&customKeyBuff[i],&rawKeyDataBuff[i],size - i);
+      if (temp != 0)      {
+        written++;
+      }
+      i += temp - 1;
+      break;
+    default:
+      customKeyBuff[i] = NONE_key;
+      break;
+    }
+  }
+  return written;
+}
+
+int getOperationArray(uint8_t* keys, uint8_t buffSize){
+  uint8_t rawKeyData[KEY_BUFFER_SIZE + 1];
+  getNextKeys(rawKeyData, sizeof(rawKeyData));
+  int keysFound = rawKeyToCustomKey(keys, &rawKeyData, sizeof(rawKeyData) / sizeof(*rawKeyData));
+  //TODO customKeyToOperation()
+}
